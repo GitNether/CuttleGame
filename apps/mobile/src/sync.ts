@@ -43,7 +43,7 @@ export class SyncError extends Error {
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no I, no O — legacy alphabet
 const LOG_CAP = 100;
-const ROOM_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, refreshed on every write
+const ROOM_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, refreshed on every write
 
 const roomRef = (code: string): DocumentReference => doc(db, "rooms", code);
 
@@ -142,7 +142,7 @@ export async function commitMove(
   });
 }
 
-/** Best-effort cleanup of a room that has passed its expiry (30 days after
+/** Best-effort cleanup of a room that has passed its expiry (7 days after
  *  the last move). Called opportunistically when the device moves on from an
  *  old room — this replaces Firestore's TTL feature, which needs billing
  *  enabled. The security rules only permit deleting expired rooms, so a

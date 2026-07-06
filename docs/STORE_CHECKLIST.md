@@ -88,7 +88,7 @@ reconsider — nothing in this project requires it.
       EAS holds the upload key. Nothing to manage by hand.
 - [ ] Data safety form — mirrors the Apple answers: collects pseudonymous
       identifiers + user-provided name/game data, encrypted in transit, users
-      can't request in-app deletion (data auto-deletes after 30 days), no
+      can't request in-app deletion (data auto-deletes after 7 days), no
       sharing with third parties, no ads.
 - [ ] Content rating questionnaire (IARC): card game, no gambling with real
       money → rated 3+/E. Note: even though Cuttle uses playing cards, there
@@ -116,7 +116,7 @@ listings and in the app listing metadata. It must state, in plain language:
       Terms (link to https://firebase.google.com/terms/data-processing-terms).
 - [ ] **Legal basis**: contract performance (GDPR Art. 6(1)(b) — you need the
       data to play the game you asked for).
-- [ ] **Retention**: game rooms expire 30 days after the last move and are
+- [ ] **Retention**: game rooms expire 7 days after the last move and are
       deleted when a device revisits them (client-side cleanup; live games
       can never be deleted). Uninstalling the app removes the local
       session; the anonymous account becomes orphaned and its rooms expire.

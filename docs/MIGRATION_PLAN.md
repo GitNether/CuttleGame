@@ -66,7 +66,7 @@ rooms/{code}                       code = 4 letters, no I/O (legacy alphabet)
   }
   createdAt:  serverTimestamp
   updatedAt:  serverTimestamp
-  expiresAt:  timestamp            // now + 30 days, refreshed on every write; gates cleanup deletes
+  expiresAt:  timestamp            // now + 7 days, refreshed on every write; gates cleanup deletes
 }
 ```
 
@@ -185,7 +185,7 @@ same action is rejected).
   - join: read doc, claim empty p2 seat or rejoin a seat whose `name` matches.
   - rejoin after restart: `{ code, seat, name }` persisted in AsyncStorage; on launch
     the app offers "Resume game XXXX" and re-subscribes.
-  - cleanup: every write stamps `expiresAt` = now + 30 days; the rules permit
+  - cleanup: every write stamps `expiresAt` = now + 7 days; the rules permit
     deleting only rooms past that mark, and the app deletes its own expired
     rooms when a device moves on. (Firestore TTL would automate this fully but
     requires billing; the `expiresAt` field is TTL-ready if that ever changes.)

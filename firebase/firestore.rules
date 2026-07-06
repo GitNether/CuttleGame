@@ -17,7 +17,7 @@ rules_version = '2';
 //     claimed only by the writer's own uid; players cannot be renamed
 //     (rebinding a seat's uid to the writer, for rejoin-by-name after a
 //     reinstall, is allowed — the name must stay identical),
-//   * clients may delete a room only once its expiresAt (last move + 30
+//   * clients may delete a room only once its expiresAt (last move + 7
 //     days) has passed — the app opportunistically deletes its own expired
 //     rooms, replacing Firestore's TTL feature, which requires billing.
 //
@@ -100,7 +100,7 @@ service cloud.firestore {
         && incoming().version == existing().version + 1
         && (isSeatedPlayer() || isClaimingEmptySeat() || isRejoiningByName());
 
-      // Anyone signed in may clean up an expired room (30 days after the
+      // Anyone signed in may clean up an expired room (7 days after the
       // last move). Live rooms cannot be deleted by anyone.
       allow delete: if signedIn() && existing().expiresAt < request.time;
     }

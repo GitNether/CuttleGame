@@ -18,7 +18,7 @@ One-time project setup (also summarized in `docs/STORE_CHECKLIST.md`):
    ```
 
 6. **Stale-room cleanup** — nothing to configure. Every write stamps the room
-   with `expiresAt` = now + 30 days; the security rules allow deleting a room
+   with `expiresAt` = now + 7 days; the security rules allow deleting a room
    only once that moment has passed, and the app opportunistically deletes its
    own expired rooms when a device moves on (creates/joins another room or
    dismisses the resume banner). Rooms of players who never return linger as

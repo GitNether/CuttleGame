@@ -165,7 +165,7 @@ export function LobbyScreen({ initialName, resumable, onEnterRoom, onDiscardResu
 
           {err ? <Text style={styles.error}>{err}</Text> : null}
           <Hint style={{ marginTop: 16, fontSize: 12 }}>
-            Room codes never contain the letters I or O. Rooms expire 30 days after the last
+            Room codes never contain the letters I or O. Rooms expire 7 days after the last
             move.
           </Hint>
         </View>
