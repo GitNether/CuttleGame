@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Cuttle Online",
+    "slug": "cuttle-online",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0a222b",
+    "primaryColor": "#4fd6c5",
+    "splash": {
+      "backgroundColor": "#0a222b",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "bundleIdentifier": "de.gitnether.cuttle",
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "de.gitnether.cuttle",
+      "adaptiveIcon": {
+        "backgroundColor": "#0a222b"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    }
+  }
+}
