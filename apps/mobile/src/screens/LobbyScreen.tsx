@@ -9,7 +9,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { SyncError, createRoom, joinRoom } from "../sync";
+import { SyncError, createRoom, deleteRoomIfExpired, joinRoom } from "../sync";
 import { saveSession, type SavedSession } from "../session";
 import { colors } from "../theme";
 import { Btn, Hint, RowLabel } from "../components/ui";
@@ -37,12 +37,18 @@ export function LobbyScreen({ initialName, resumable, onEnterRoom, onDiscardResu
     return "Couldn't reach the server — check your connection and try again.";
   };
 
+  /** Leaving an old room behind? Tidy it up if it has expired. */
+  const cleanupOldRoom = (newCode: string) => {
+    if (resumable && resumable.code !== newCode) void deleteRoomIfExpired(resumable.code);
+  };
+
   const create = async () => {
     if (!name.trim()) return setErr("Enter your name first.");
     setBusy(true);
     setErr("");
     try {
       const { code, seat } = await createRoom(name.trim());
+      cleanupOldRoom(code);
       await saveSession({ code, seat, name: name.trim() });
       onEnterRoom(code, seat, name.trim());
     } catch (e) {
@@ -60,6 +66,7 @@ export function LobbyScreen({ initialName, resumable, onEnterRoom, onDiscardResu
     setErr("");
     try {
       const { seat } = await joinRoom(code, name.trim());
+      cleanupOldRoom(code);
       await saveSession({ code, seat, name: name.trim() });
       onEnterRoom(code, seat, name.trim());
     } catch (e) {
@@ -110,7 +117,15 @@ export function LobbyScreen({ initialName, resumable, onEnterRoom, onDiscardResu
               </Text>
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <Btn title="Resume game" kind="primary" onPress={resume} disabled={busy} />
-                <Btn title="Forget it" small onPress={onDiscardResume} disabled={busy} />
+                <Btn
+                  title="Forget it"
+                  small
+                  disabled={busy}
+                  onPress={() => {
+                    void deleteRoomIfExpired(resumable.code);
+                    onDiscardResume();
+                  }}
+                />
               </View>
             </View>
           )}
@@ -150,8 +165,8 @@ export function LobbyScreen({ initialName, resumable, onEnterRoom, onDiscardResu
 
           {err ? <Text style={styles.error}>{err}</Text> : null}
           <Hint style={{ marginTop: 16, fontSize: 12 }}>
-            Room codes never contain the letters I or O. Rooms are kept for 30 days after the
-            last move, then cleaned up automatically.
+            Room codes never contain the letters I or O. Rooms expire 30 days after the last
+            move.
           </Hint>
         </View>
       </ScrollView>
