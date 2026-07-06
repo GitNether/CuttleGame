@@ -68,15 +68,18 @@ service cloud.firestore {
           && incoming().players.p1 == existing().players.p1;
       }
 
-      // Reinstalled app, new anonymous uid: rebind exactly one seat's uid to
-      // the writer while keeping both names unchanged.
+      // Reinstalled app, new anonymous uid: rebind a seat's uid to the writer
+      // while keeping all names unchanged. Also covers p1 rejoining a room
+      // that is still waiting for p2.
       function isRejoiningByName() {
-        return existing().players.p2 != null
-          && incoming().players.p2 != null
-          && incoming().players.p1.name == existing().players.p1.name
-          && incoming().players.p2.name == existing().players.p2.name
+        return incoming().players.p1.name == existing().players.p1.name
+          && ((existing().players.p2 == null && incoming().players.p2 == null)
+              || (existing().players.p2 != null
+                  && incoming().players.p2 != null
+                  && incoming().players.p2.name == existing().players.p2.name))
           && (incoming().players.p1.uid == request.auth.uid
-              || incoming().players.p2.uid == request.auth.uid);
+              || (incoming().players.p2 != null
+                  && incoming().players.p2.uid == request.auth.uid));
       }
 
       allow get: if signedIn();
