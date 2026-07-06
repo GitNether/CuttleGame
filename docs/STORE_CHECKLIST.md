@@ -21,8 +21,10 @@ Costs you should expect (there is no way around these for store distribution):
       `apps/mobile/src/firebaseConfig.ts`.
 - [ ] Deploy the security rules: `firebase deploy --only firestore:rules`
       from the `firebase/` directory (see `firebase/README.md`).
-- [ ] Add the **TTL policy**: Firestore → Time-to-live → collection group
-      `rooms`, field `expiresAt`. This is the stale-room cleanup.
+- [ ] ~~TTL policy~~ — not needed: TTL management turned out to require
+      billing (Blaze), so stale-room cleanup is done client-side instead (the
+      rules allow deleting rooms whose `expiresAt` has passed and the app
+      tidies its own old rooms). Nothing to configure.
 - [ ] Smoke test: `cd apps/mobile && npx expo start`, open it in Expo Go on
       two phones, create a room on one and join from the other.
 
@@ -86,7 +88,7 @@ reconsider — nothing in this project requires it.
       EAS holds the upload key. Nothing to manage by hand.
 - [ ] Data safety form — mirrors the Apple answers: collects pseudonymous
       identifiers + user-provided name/game data, encrypted in transit, users
-      can't request in-app deletion (data auto-deletes after 30 days), no
+      can't request in-app deletion (data auto-deletes after 7 days), no
       sharing with third parties, no ads.
 - [ ] Content rating questionnaire (IARC): card game, no gambling with real
       money → rated 3+/E. Note: even though Cuttle uses playing cards, there
@@ -114,8 +116,9 @@ listings and in the app listing metadata. It must state, in plain language:
       Terms (link to https://firebase.google.com/terms/data-processing-terms).
 - [ ] **Legal basis**: contract performance (GDPR Art. 6(1)(b) — you need the
       data to play the game you asked for).
-- [ ] **Retention**: game rooms are deleted automatically 30 days after the
-      last move (the Firestore TTL). Uninstalling the app removes the local
+- [ ] **Retention**: game rooms expire 7 days after the last move and are
+      deleted when a device revisits them (client-side cleanup; live games
+      can never be deleted). Uninstalling the app removes the local
       session; the anonymous account becomes orphaned and its rooms expire.
 - [ ] **Rights**: access, rectification, erasure, complaint to a supervisory
       authority; how to contact you to exercise them (e.g. email with the

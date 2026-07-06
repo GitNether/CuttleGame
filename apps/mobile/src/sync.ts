@@ -7,7 +7,9 @@ import {
 } from "@cuttle/engine";
 import {
   Timestamp,
+  deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   runTransaction,
   serverTimestamp,
@@ -41,7 +43,7 @@ export class SyncError extends Error {
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // no I, no O — legacy alphabet
 const LOG_CAP = 100;
-const ROOM_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days, refreshed on every write
+const ROOM_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, refreshed on every write
 
 const roomRef = (code: string): DocumentReference => doc(db, "rooms", code);
 
@@ -138,6 +140,24 @@ export async function commitMove(
     if (!mutator(state)) throw new SyncError("rejected");
     tx.update(roomRef(code), writePayload(room.version + 1, state));
   });
+}
+
+/** Best-effort cleanup of a room that has passed its expiry (7 days after
+ *  the last move). Called opportunistically when the device moves on from an
+ *  old room — this replaces Firestore's TTL feature, which needs billing
+ *  enabled. The security rules only permit deleting expired rooms, so a
+ *  clock-skewed or malicious client can never delete a live game. */
+export async function deleteRoomIfExpired(code: string): Promise<void> {
+  try {
+    const snap = await getDoc(roomRef(code));
+    if (!snap.exists()) return;
+    const expiresAt = snap.get("expiresAt") as Timestamp | undefined;
+    if (expiresAt && expiresAt.toMillis() < Date.now()) {
+      await deleteDoc(roomRef(code));
+    }
+  } catch {
+    // cleanup is optional — never let it break the flow that triggered it
+  }
 }
 
 /** Realtime subscription with automatic resubscribe on listener errors.

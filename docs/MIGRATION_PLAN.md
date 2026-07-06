@@ -41,7 +41,7 @@ Cloud Function that imports the same package and replays the action — no engin
 |---|---|---|---|
 | Write ordering | `runTransaction` with read-modify-write and automatic retry | transactions exist but are per-node with local-cache quirks | Lesson #3: a version-checked transaction is the clean replacement for the legacy monotonic version + nonce tiebreaker |
 | Data model | 1 room = 1 document | 1 room = 1 subtree | Whole game state (~10–20 KB with capped log) fits one doc; every move is one doc write, one listener event |
-| Stale room cleanup | **TTL policies** — free, serverless: set `expiresAt`, Firestore deletes the doc | needs a scheduled Cloud Function or client-side sweep | No paid services, no cron |
+| Stale room cleanup | `expiresAt` marker + rules-gated client deletes (TTL policies exist but require billing) | needs a scheduled Cloud Function or client-side sweep | No paid services, no cron |
 | EU region (GDPR) | `europe-west3` (Frankfurt) or `eur3` multi-region | `europe-west1` only | User is in Germany; Frankfurt keeps data in-country |
 | Reconnect | `onSnapshot` has built-in offline cache, retry, and latency compensation | comparable | Both fine; Firestore's is fully automatic |
 | Free tier | 50 k reads / 20 k writes per day | 1 GB stored / 10 GB transfer per month | A full game is ~100–200 writes; two friends playing daily won't scratch either, but Firestore's per-day quotas reset and can't strand you mid-month |
@@ -66,7 +66,7 @@ rooms/{code}                       code = 4 letters, no I/O (legacy alphabet)
   }
   createdAt:  serverTimestamp
   updatedAt:  serverTimestamp
-  expiresAt:  timestamp            // TTL field: now + 30 days, refreshed on every write
+  expiresAt:  timestamp            // now + 7 days, refreshed on every write; gates cleanup deletes
 }
 ```
 
@@ -120,7 +120,8 @@ match /rooms/{code} {
                 && versionIncrementsByOne()          // enforces the transaction protocol
                 && (isSeatedPlayer() || isClaimingEmptySeat() || isNameRejoin())
                 && validShape();
-  allow delete: if false;                            // TTL handles cleanup
+  allow delete: if signedIn()
+                && expired();                        // only stale rooms are deletable
 }
 ```
 
@@ -184,8 +185,10 @@ same action is rejected).
   - join: read doc, claim empty p2 seat or rejoin a seat whose `name` matches.
   - rejoin after restart: `{ code, seat, name }` persisted in AsyncStorage; on launch
     the app offers "Resume game XXXX" and re-subscribes.
-  - cleanup: `expiresAt` TTL (30 days, refreshed each move) — abandoned rooms vanish
-    without any server code.
+  - cleanup: every write stamps `expiresAt` = now + 7 days; the rules permit
+    deleting only rooms past that mark, and the app deletes its own expired
+    rooms when a device moves on. (Firestore TTL would automate this fully but
+    requires billing; the `expiresAt` field is TTL-ready if that ever changes.)
 
 ## 6. Store distribution (task 5)
 
@@ -194,8 +197,7 @@ same action is rejected).
   EAS needs. Free-tier note: EAS Build's free plan covers this project's build volume;
   no paid service is added.
 - The human checklist (developer accounts, signing, store listings, GDPR privacy
-  policy, Firebase EU-region setup, TTL policy activation) is written out in
-  `docs/STORE_CHECKLIST.md`.
+  policy, Firebase EU-region setup) is written out in `docs/STORE_CHECKLIST.md`.
 
 ## 7. Explicitly out of scope for v1
 
