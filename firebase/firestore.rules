@@ -1,0 +1,101 @@
+rules_version = '2';
+
+// Cuttle Online — v1 trust model
+//
+// Rooms are private-by-code between two friends: anyone signed in
+// (anonymously) who knows the 4-letter code can read the room and, within the
+// constraints below, write moves. This intentionally mirrors the legacy
+// artifact's shared-storage trust model. What the rules DO enforce:
+//
+//   * every write must be authenticated (anonymous Firebase Auth),
+//   * rooms cannot be listed/enumerated — you must know the code,
+//   * the version counter must increase by exactly 1 per write, which makes
+//     the client transactions' optimistic-concurrency protocol mandatory
+//     (a slow stale write can never clobber a newer state),
+//   * the document shape (top-level fields) is pinned,
+//   * seat creation binds p1 to the creator's uid; the empty p2 seat can be
+//     claimed only by the writer's own uid; players cannot be renamed
+//     (rebinding a seat's uid to the writer, for rejoin-by-name after a
+//     reinstall, is allowed — the name must stay identical),
+//   * clients cannot delete rooms (cleanup is Firestore's TTL on expiresAt).
+//
+// Hardening path (v2): move move-validation into a Cloud Function that
+// imports @cuttle/engine and replays the submitted action server-side.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /rooms/{code} {
+
+      function signedIn() {
+        return request.auth != null;
+      }
+
+      function incoming() {
+        return request.resource.data;
+      }
+
+      function existing() {
+        return resource.data;
+      }
+
+      function hasValidShape(d) {
+        return d.keys().hasAll(['version', 'state', 'players', 'createdAt', 'updatedAt', 'expiresAt'])
+          && d.version is int
+          && d.state is map
+          && d.players is map;
+      }
+
+      function seatValid(seat) {
+        return seat is map
+          && seat.keys().hasOnly(['uid', 'name'])
+          && seat.uid is string
+          && seat.name is string
+          && seat.name.size() >= 1
+          && seat.name.size() <= 16;
+      }
+
+      // The writer already sits in one of the seats.
+      function isSeatedPlayer() {
+        return request.auth.uid == existing().players.p1.uid
+          || (existing().players.p2 != null && request.auth.uid == existing().players.p2.uid);
+      }
+
+      // A newcomer takes the free p2 seat (p1's seat must stay untouched).
+      function isClaimingEmptySeat() {
+        return existing().players.p2 == null
+          && seatValid(incoming().players.p2)
+          && incoming().players.p2.uid == request.auth.uid
+          && incoming().players.p1 == existing().players.p1;
+      }
+
+      // Reinstalled app, new anonymous uid: rebind exactly one seat's uid to
+      // the writer while keeping both names unchanged.
+      function isRejoiningByName() {
+        return existing().players.p2 != null
+          && incoming().players.p2 != null
+          && incoming().players.p1.name == existing().players.p1.name
+          && incoming().players.p2.name == existing().players.p2.name
+          && (incoming().players.p1.uid == request.auth.uid
+              || incoming().players.p2.uid == request.auth.uid);
+      }
+
+      allow get: if signedIn();
+      allow list: if false; // join-by-code only; no room enumeration
+
+      allow create: if signedIn()
+        && code.size() == 4
+        && hasValidShape(incoming())
+        && incoming().version == 1
+        && seatValid(incoming().players.p1)
+        && incoming().players.p1.uid == request.auth.uid
+        && incoming().players.p2 == null;
+
+      allow update: if signedIn()
+        && hasValidShape(incoming())
+        && incoming().version == existing().version + 1
+        && (isSeatedPlayer() || isClaimingEmptySeat() || isRejoiningByName());
+
+      allow delete: if false; // TTL policy on expiresAt handles cleanup
+    }
+  }
+}
