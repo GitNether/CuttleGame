@@ -97,12 +97,23 @@ export function GameScreen({ code, seat, onLeave }: Props) {
       if (!base || busy) return;
       setBusy(true);
       try {
-        await commitMove(code, base.version, mutator);
+        // A Firestore transaction can hang indefinitely on a flaky
+        // connection. Race it against a timeout so `busy` can never get
+        // stuck true — which would otherwise dead-lock every button. The
+        // version check makes a late-arriving write harmless, and the
+        // snapshot listener always delivers the authoritative state.
+        await Promise.race([
+          commitMove(code, base.version, mutator),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("commit-timeout")), 15000)
+          ),
+        ]);
         setSelCard(null);
         setTargetMode(null);
       } catch {
-        // stale base, guard refusal, or network hiccup — the snapshot
-        // listener delivers the authoritative state either way.
+        // stale base, guard refusal, timeout, or network hiccup — the
+        // snapshot listener holds the truth; selections are left intact so
+        // the user can simply try again.
       } finally {
         setBusy(false);
       }
@@ -581,11 +592,10 @@ export function GameScreen({ code, seat, onLeave }: Props) {
           kind="primary"
           title="Discard selected"
           disabled={discardSel.length !== s.discardNeed || busy}
-          onPress={() => {
-            const sel = discardSel;
-            setDiscardSel([]);
-            commit((g) => actDiscardDone(g, me, sel));
-          }}
+          // Don't clear the selection up front — if the commit fails the
+          // selection stays put so the button remains usable for a retry.
+          // The snapshot listener clears discardSel once the move lands.
+          onPress={() => commit((g) => actDiscardDone(g, me, discardSel))}
         />
       </Sheet>
 
