@@ -139,13 +139,14 @@ export function actOneOff(
 }
 
 /** After a one-off or a counter: hand the response to the other side, or
- *  resolve immediately when they hold no 2 — or when the last player in the
- *  chain has a Queen (Queens protect their owner's one-offs "in suspension"). */
+ *  resolve immediately when they hold no 2. A 2 can ALWAYS counter a one-off —
+ *  a Queen protects its owner's cards from being targeted (jacks, 2-as-scrap,
+ *  9), but it does not stop the opponent from countering a one-off. */
 function advanceCounter(s: GameState): void {
   const pd = s.pending as PendingOneOff;
   const lastBy = pd.counters.length ? pd.counters[pd.counters.length - 1].by : pd.by;
   const responder = other(lastBy);
-  if (hasCounterTwo(s, responder) && queensOf(s, lastBy).length === 0) {
+  if (hasCounterTwo(s, responder)) {
     s.phase = "counter";
     s.actor = responder;
   } else {

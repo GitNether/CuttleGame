@@ -150,14 +150,15 @@ Faithful port, not a rewrite:
   moves from the legacy component body into the engine so UI and future server
   validation share one implementation.
 - House rule kept: **9 one-off puts the permanent on top of the draw pile**.
-- All hard-won behaviors preserved: LIFO 2-counter chains, Queen blocking counters,
+- All hard-won behaviors preserved: LIFO 2-counter chains,
   auto-resolve when the responder holds no 2, six reverting stolen cards to `base`,
   seven→nested one-offs, empty-deck pass / three-pass draw, king goals 21/14/10/7/5,
-  rematch with alternating dealer.
+  rematch with alternating dealer. (A 2 can always counter a one-off — a Queen only
+  protects its owner's cards from being *targeted*, it does not block counters.)
 
 Unit tests (Vitest) cover exactly the regression list: scuttle comparisons; counter
 chains with 0/1/2/3 twos; queen edge cases (2 targeting the only queen is legal, double
-queens protect each other, queen blocks counters); jack-stack control flipping across
+queens protect each other, queens do not block counters); jack-stack control flipping across
 multiple jacks; six reverting stolen cards; seven→one-off nesting (including countered
 nested one-offs); the 9 house rule (card is the next draw); three-pass draw with pass
 counter reset; king thresholds; plus guard/idempotence tests (double-tap replay of the
