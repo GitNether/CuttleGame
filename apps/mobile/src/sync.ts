@@ -20,6 +20,9 @@ import { auth, db } from "./firebase";
 export interface SeatInfo {
   uid: string;
   name: string;
+  /** Expo push token for "your turn" notifications; omitted if push isn't set
+   *  up on that device. */
+  pushToken?: string;
 }
 
 export interface RoomDoc {
@@ -57,10 +60,18 @@ function writePayload(version: number, state: GameState) {
   return { version, state, updatedAt: serverTimestamp(), expiresAt: expiry() };
 }
 
+/** Firestore rejects `undefined`, so only include pushToken when we have one. */
+function makeSeat(uid: string, name: string, pushToken?: string | null): SeatInfo {
+  return pushToken ? { uid, name, pushToken } : { uid, name };
+}
+
 /** Creates a room with a fresh 4-letter code. The deal happens inside the
  *  transaction body but is only committed once — and code collisions retry
  *  with a new code. */
-export async function createRoom(name: string): Promise<{ code: string; seat: PlayerId }> {
+export async function createRoom(
+  name: string,
+  pushToken?: string | null
+): Promise<{ code: string; seat: PlayerId }> {
   const uid = auth.currentUser!.uid;
   for (let attempt = 0; attempt < 8; attempt++) {
     const code = randomCode();
@@ -70,7 +81,7 @@ export async function createRoom(name: string): Promise<{ code: string; seat: Pl
       const state = newGame({ p1: name, p2: "" }, "p1");
       tx.set(roomRef(code), {
         ...writePayload(1, state),
-        players: { p1: { uid, name }, p2: null },
+        players: { p1: makeSeat(uid, name, pushToken), p2: null },
         createdAt: serverTimestamp(),
       });
       return true;
@@ -82,8 +93,12 @@ export async function createRoom(name: string): Promise<{ code: string; seat: Pl
 
 /** Joins a room: claims the empty p2 seat, or rejoins a seat whose name
  *  matches (rebinding that seat's uid — covers reinstalled apps whose
- *  anonymous auth uid changed). */
-export async function joinRoom(code: string, name: string): Promise<{ seat: PlayerId }> {
+ *  anonymous auth uid changed). Also refreshes the seat's push token. */
+export async function joinRoom(
+  code: string,
+  name: string,
+  pushToken?: string | null
+): Promise<{ seat: PlayerId }> {
   const uid = auth.currentUser!.uid;
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(roomRef(code));
@@ -94,9 +109,12 @@ export async function joinRoom(code: string, name: string): Promise<{ seat: Play
     for (const seat of ["p1", "p2"] as PlayerId[]) {
       const si = room.players[seat];
       if (si && (si.uid === uid || si.name === name)) {
-        if (si.uid !== uid || si.name !== name) {
+        const token = pushToken ?? si.pushToken;
+        const rebind = si.uid !== uid || si.name !== name;
+        const tokenChanged = (si.pushToken ?? null) !== (token ?? null);
+        if (rebind || tokenChanged) {
           tx.update(roomRef(code), {
-            [`players.${seat}`]: { uid, name: si.name },
+            [`players.${seat}`]: makeSeat(uid, si.name, token),
             version: room.version + 1,
             updatedAt: serverTimestamp(),
             expiresAt: expiry(),
@@ -112,7 +130,7 @@ export async function joinRoom(code: string, name: string): Promise<{ seat: Play
       if (!actJoinAsP2(state, name)) throw new SyncError("room-full");
       tx.update(roomRef(code), {
         ...writePayload(room.version + 1, state),
-        "players.p2": { uid, name },
+        "players.p2": makeSeat(uid, name, pushToken),
       });
       return { seat: "p2" };
     }
@@ -130,8 +148,8 @@ export async function commitMove(
   code: string,
   baseVersion: number,
   mutator: (s: GameState) => boolean
-): Promise<void> {
-  await runTransaction(db, async (tx) => {
+): Promise<{ state: GameState; players: RoomDoc["players"] }> {
+  return runTransaction(db, async (tx) => {
     const snap = await tx.get(roomRef(code));
     if (!snap.exists()) throw new SyncError("not-found");
     const room = snap.data() as RoomDoc;
@@ -139,7 +157,17 @@ export async function commitMove(
     const state = clone(room.state);
     if (!mutator(state)) throw new SyncError("rejected");
     tx.update(roomRef(code), writePayload(room.version + 1, state));
+    return { state, players: room.players };
   });
+}
+
+/** Which player, if any, must act in this state — used to decide who to ping
+ *  with a "your turn" notification. */
+export function whoActsNext(s: GameState): PlayerId | null {
+  if (s.phase === "play") return s.turn;
+  if (s.phase === "counter" || s.phase === "discard" || s.phase === "scrap_pick" || s.phase === "seven")
+    return s.actor;
+  return null; // waiting / over
 }
 
 /** Best-effort cleanup of a room that has passed its expiry (7 days after

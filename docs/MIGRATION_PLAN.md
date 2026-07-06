@@ -200,8 +200,16 @@ same action is rejected).
 - The human checklist (developer accounts, signing, store listings, GDPR privacy
   policy, Firebase EU-region setup) is written out in `docs/STORE_CHECKLIST.md`.
 
-## 7. Explicitly out of scope for v1
+## 7. Push notifications ("your turn")
+
+Implemented client-side (no server): each seat stores an Expo push token in the
+room doc; after a move that hands the action to the opponent, the acting client
+sends them a push via Expo's free push API. Degrades gracefully — if permission
+is denied or FCM/EAS isn't configured, the token is null and the game plays on
+without push. Activation steps (EAS projectId, FCM credentials) are in
+`docs/STORE_CHECKLIST.md` §2b.
+
+## 8. Explicitly out of scope for v1
 
 - Server-side move validation (Cloud Functions) — engine is structured for it, not built.
 - Accounts / non-anonymous auth, matchmaking, room browser (dropped, see §3).
-- Push notifications ("your turn") — nice later; needs Expo push tokens in the doc.

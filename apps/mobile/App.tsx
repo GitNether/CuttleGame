@@ -4,10 +4,13 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Btn, Hint } from "./src/components/ui";
 import { ensureSignedIn } from "./src/firebase";
+import { configureNotifications, registerForPushNotificationsAsync } from "./src/notifications";
 import { clearSession, loadPlayerName, loadSession, type SavedSession } from "./src/session";
 import { GameScreen } from "./src/screens/GameScreen";
 import { LobbyScreen } from "./src/screens/LobbyScreen";
 import { colors } from "./src/theme";
+
+configureNotifications(); // how notifications render while the app is open
 
 type Screen =
   | { kind: "boot" }
@@ -19,6 +22,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>({ kind: "boot" });
   const [savedName, setSavedName] = useState("");
   const [resumable, setResumable] = useState<SavedSession | null>(null);
+  const [pushToken, setPushToken] = useState<string | null>(null);
   const [authTick, setAuthTick] = useState(0); // bump to retry sign-in
 
   useEffect(() => {
@@ -39,6 +43,18 @@ export default function App() {
       alive = false;
     };
   }, [authTick]);
+
+  // Ask for notification permission and fetch this device's push token once,
+  // in the background. Never blocks the UI — stays null if push isn't set up.
+  useEffect(() => {
+    let alive = true;
+    registerForPushNotificationsAsync().then((t) => {
+      if (alive) setPushToken(t);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <View style={styles.root}>
@@ -70,6 +86,7 @@ export default function App() {
         <LobbyScreen
           initialName={savedName}
           resumable={resumable}
+          pushToken={pushToken}
           onEnterRoom={(code, seat, name) => {
             setSavedName(name);
             setResumable({ code, seat, name });

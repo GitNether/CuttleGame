@@ -49,6 +49,34 @@ The EAS **free tier** covers this project's build volume; builds queue longer
 than on paid plans, that's all. If EAS ever asks you to upgrade, stop and
 reconsider — nothing in this project requires it.
 
+## 2b. Push notifications ("your turn") — optional but recommended
+
+The app already asks for notification permission and sends a "your turn" push
+to the opponent after each move (via Expo's free push service). It stays
+dormant until two things are set up — until then the game works fine, just
+without push:
+
+- [ ] **A real EAS projectId.** `npx eas init` (step 2) fills
+      `extra.eas.projectId` in `app.json`. Without it the app can't mint a push
+      token. Commit the change so every build shares it.
+- [ ] **Android delivery via FCM.** Expo's push service needs your Firebase
+      Cloud Messaging credentials to deliver to Android:
+  - In the Firebase console (same `cuttlegame` project) → Project settings →
+    **Cloud Messaging**, make sure the **Firebase Cloud Messaging API (V1)**
+    is enabled.
+  - Create a **service-account key**: Project settings → Service accounts →
+    Generate new private key (downloads a JSON).
+  - Upload it to Expo: `eas credentials` → Android → *Google Service Account* →
+    *push notifications*, or the EAS dashboard. (Keep that JSON out of git.)
+  - Build the app with EAS (`eas build`), not the plain GitHub-Actions APK —
+    the push token needs the EAS project. The GitHub APK still runs the game,
+    it just won't deliver Android push.
+- [ ] **iOS delivery** is handled by EAS automatically when you build with your
+      Apple Developer account (it provisions the APNs key). No extra steps
+      beyond having the Apple account (§3).
+- [ ] Remember: remote push does **not** work in Expo Go (SDK 53) — test it in
+      an EAS **development** or **preview** build on a real device.
+
 ## 3. Apple (iOS)
 
 - [ ] Enroll in the Apple Developer Program (developer.apple.com, 99 €/year,
@@ -108,8 +136,9 @@ listings and in the app listing metadata. It must state, in plain language:
 - [ ] **Who you are** (name, contact email — as the "controller" under GDPR
       Art. 4, that's you as a private person).
 - [ ] **What is processed**: a self-chosen display name, an anonymous device
-      identifier (Firebase anonymous auth UID), and the moves/state of games
-      you play. No email, no real name, no location, no advertising ID.
+      identifier (Firebase anonymous auth UID), a push notification token (if
+      the player allows notifications), and the moves/state of games you play.
+      No email, no real name, no location, no advertising ID.
 - [ ] **Where**: Google Firebase (Firestore + Authentication), stored in
       **Frankfurt, Germany (europe-west3)**. Processor: Google Cloud EMEA Ltd
       (Ireland), under the EU Standard Contractual Clauses / Data Processing

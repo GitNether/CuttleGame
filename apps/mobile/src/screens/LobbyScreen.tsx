@@ -17,11 +17,18 @@ import { Btn, Hint, RowLabel } from "../components/ui";
 interface Props {
   initialName: string;
   resumable: SavedSession | null;
+  pushToken: string | null;
   onEnterRoom: (code: string, seat: PlayerId, name: string) => void;
   onDiscardResume: () => void;
 }
 
-export function LobbyScreen({ initialName, resumable, onEnterRoom, onDiscardResume }: Props) {
+export function LobbyScreen({
+  initialName,
+  resumable,
+  pushToken,
+  onEnterRoom,
+  onDiscardResume,
+}: Props) {
   const [name, setName] = useState(initialName);
   const [joinCode, setJoinCode] = useState("");
   const [err, setErr] = useState("");
@@ -47,7 +54,7 @@ export function LobbyScreen({ initialName, resumable, onEnterRoom, onDiscardResu
     setBusy(true);
     setErr("");
     try {
-      const { code, seat } = await createRoom(name.trim());
+      const { code, seat } = await createRoom(name.trim(), pushToken);
       cleanupOldRoom(code);
       await saveSession({ code, seat, name: name.trim() });
       onEnterRoom(code, seat, name.trim());
@@ -65,7 +72,7 @@ export function LobbyScreen({ initialName, resumable, onEnterRoom, onDiscardResu
     setBusy(true);
     setErr("");
     try {
-      const { seat } = await joinRoom(code, name.trim());
+      const { seat } = await joinRoom(code, name.trim(), pushToken);
       cleanupOldRoom(code);
       await saveSession({ code, seat, name: name.trim() });
       onEnterRoom(code, seat, name.trim());
@@ -82,7 +89,7 @@ export function LobbyScreen({ initialName, resumable, onEnterRoom, onDiscardResu
     setErr("");
     try {
       // Re-run the join flow so a reinstalled device rebinds its uid.
-      const { seat } = await joinRoom(resumable.code, resumable.name);
+      const { seat } = await joinRoom(resumable.code, resumable.name, pushToken);
       onEnterRoom(resumable.code, seat, resumable.name);
     } catch (e) {
       setErr(friendlyError(e));

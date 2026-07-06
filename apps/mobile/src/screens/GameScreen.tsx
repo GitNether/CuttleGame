@@ -42,7 +42,8 @@ import {
 } from "react-native";
 import { CardView } from "../components/CardView";
 import { Btn, Hint, Notice, RowLabel, Sheet } from "../components/ui";
-import { commitMove, subscribeRoom, type RoomDoc } from "../sync";
+import { commitMove, subscribeRoom, whoActsNext, type RoomDoc } from "../sync";
+import { sendTurnNotification } from "../notifications";
 import { colors } from "../theme";
 
 interface Props {
@@ -102,12 +103,18 @@ export function GameScreen({ code, seat, onLeave }: Props) {
         // stuck true — which would otherwise dead-lock every button. The
         // version check makes a late-arriving write harmless, and the
         // snapshot listener always delivers the authoritative state.
-        await Promise.race([
+        const result = await Promise.race([
           commitMove(code, base.version, mutator),
-          new Promise((_, reject) =>
+          new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("commit-timeout")), 15000)
           ),
         ]);
+        // If my move handed the action to my opponent, ping their device.
+        const opponent = other(seat);
+        if (whoActsNext(result.state) === opponent) {
+          const token = result.players[opponent]?.pushToken;
+          if (token) void sendTurnNotification(token, code, result.state.names[seat]);
+        }
         setSelCard(null);
         setTargetMode(null);
       } catch {
