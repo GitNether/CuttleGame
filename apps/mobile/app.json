@@ -26,6 +26,14 @@
       },
       "edgeToEdgeEnabled": true
     },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "color": "#4fd6c5"
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "REPLACE_WITH_EAS_PROJECT_ID"

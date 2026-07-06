@@ -49,11 +49,13 @@ service cloud.firestore {
 
       function seatValid(seat) {
         return seat is map
-          && seat.keys().hasOnly(['uid', 'name'])
+          && seat.keys().hasAll(['uid', 'name'])
+          && seat.keys().hasOnly(['uid', 'name', 'pushToken'])
           && seat.uid is string
           && seat.name is string
           && seat.name.size() >= 1
-          && seat.name.size() <= 16;
+          && seat.name.size() <= 16
+          && (!('pushToken' in seat) || seat.pushToken is string);
       }
 
       // The writer already sits in one of the seats.

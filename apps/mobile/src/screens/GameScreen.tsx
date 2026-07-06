@@ -42,7 +42,8 @@ import {
 } from "react-native";
 import { CardView } from "../components/CardView";
 import { Btn, Hint, Notice, RowLabel, Sheet } from "../components/ui";
-import { commitMove, subscribeRoom, type RoomDoc } from "../sync";
+import { commitMove, subscribeRoom, whoActsNext, type RoomDoc } from "../sync";
+import { sendTurnNotification } from "../notifications";
 import { colors } from "../theme";
 
 interface Props {
@@ -97,12 +98,29 @@ export function GameScreen({ code, seat, onLeave }: Props) {
       if (!base || busy) return;
       setBusy(true);
       try {
-        await commitMove(code, base.version, mutator);
+        // A Firestore transaction can hang indefinitely on a flaky
+        // connection. Race it against a timeout so `busy` can never get
+        // stuck true — which would otherwise dead-lock every button. The
+        // version check makes a late-arriving write harmless, and the
+        // snapshot listener always delivers the authoritative state.
+        const result = await Promise.race([
+          commitMove(code, base.version, mutator),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("commit-timeout")), 15000)
+          ),
+        ]);
+        // If my move handed the action to my opponent, ping their device.
+        const opponent = other(seat);
+        if (whoActsNext(result.state) === opponent) {
+          const token = result.players[opponent]?.pushToken;
+          if (token) void sendTurnNotification(token, code, result.state.names[seat]);
+        }
         setSelCard(null);
         setTargetMode(null);
       } catch {
-        // stale base, guard refusal, or network hiccup — the snapshot
-        // listener delivers the authoritative state either way.
+        // stale base, guard refusal, timeout, or network hiccup — the
+        // snapshot listener holds the truth; selections are left intact so
+        // the user can simply try again.
       } finally {
         setBusy(false);
       }
@@ -378,9 +396,6 @@ export function GameScreen({ code, seat, onLeave }: Props) {
             hit Join. This screen updates automatically when they arrive.
           </Notice>
         )}
-        {oppGlassesOnMe && (
-          <Notice>👓 {s.names[opp]} has Glasses in play — your hand is revealed to them!</Notice>
-        )}
 
         {/* Opponent zone */}
         <View style={styles.zone}>
@@ -482,6 +497,10 @@ export function GameScreen({ code, seat, onLeave }: Props) {
 
         {myTurn && selCard != null && !sevenMine && <ActionMenu card={selCard} />}
 
+        {oppGlassesOnMe && (
+          <Notice>👓 {s.names[opp]} has Glasses in play — your hand is revealed to them!</Notice>
+        )}
+
         {/* Log */}
         <View style={styles.log}>
           {s.log
@@ -580,11 +599,10 @@ export function GameScreen({ code, seat, onLeave }: Props) {
           kind="primary"
           title="Discard selected"
           disabled={discardSel.length !== s.discardNeed || busy}
-          onPress={() => {
-            const sel = discardSel;
-            setDiscardSel([]);
-            commit((g) => actDiscardDone(g, me, sel));
-          }}
+          // Don't clear the selection up front — if the commit fails the
+          // selection stays put so the button remains usable for a retry.
+          // The snapshot listener clears discardSel once the move lands.
+          onPress={() => commit((g) => actDiscardDone(g, me, discardSel))}
         />
       </Sheet>
 
