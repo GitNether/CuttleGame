@@ -378,9 +378,6 @@ export function GameScreen({ code, seat, onLeave }: Props) {
             hit Join. This screen updates automatically when they arrive.
           </Notice>
         )}
-        {oppGlassesOnMe && (
-          <Notice>👓 {s.names[opp]} has Glasses in play — your hand is revealed to them!</Notice>
-        )}
 
         {/* Opponent zone */}
         <View style={styles.zone}>
@@ -481,6 +478,10 @@ export function GameScreen({ code, seat, onLeave }: Props) {
         </View>
 
         {myTurn && selCard != null && !sevenMine && <ActionMenu card={selCard} />}
+
+        {oppGlassesOnMe && (
+          <Notice>👓 {s.names[opp]} has Glasses in play — your hand is revealed to them!</Notice>
+        )}
 
         {/* Log */}
         <View style={styles.log}>

@@ -36,7 +36,6 @@ export function CardView({ id, onPress, sel, target, small, back, glasses }: Pro
     <>
       <View style={styles.tl}>
         <Text style={cornerStyle}>{rankStr(id)}</Text>
-        <Text style={cornerStyle}>{SUITS[suitOf(id)]}</Text>
       </View>
       <Text style={[small ? styles.midSmall : styles.mid, { color: red ? colors.cardRed : colors.cardText }]}>
         {SUITS[suitOf(id)]}
