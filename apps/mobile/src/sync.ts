@@ -161,6 +161,34 @@ export async function commitMove(
   });
 }
 
+/** Ensure the current player's seat carries this push token. Handles the case
+ *  where the token only resolves (after the OS permission prompt) once the
+ *  player is already in a room, so create/join couldn't store it. No-op when
+ *  the token already matches or the player isn't seated here. */
+export async function refreshSeatPushToken(code: string, token: string): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid || !token) return;
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(roomRef(code));
+      if (!snap.exists()) return;
+      const room = snap.data() as RoomDoc;
+      const seat = (["p1", "p2"] as PlayerId[]).find((p) => room.players[p]?.uid === uid);
+      if (!seat) return;
+      const si = room.players[seat]!;
+      if (si.pushToken === token) return; // already stored
+      tx.update(roomRef(code), {
+        [`players.${seat}`]: makeSeat(uid, si.name, token),
+        version: room.version + 1,
+        updatedAt: serverTimestamp(),
+        expiresAt: expiry(),
+      });
+    });
+  } catch {
+    // best-effort — push is a nicety, never block the game
+  }
+}
+
 /** Which player, if any, must act in this state — used to decide who to ping
  *  with a "your turn" notification. */
 export function whoActsNext(s: GameState): PlayerId | null {

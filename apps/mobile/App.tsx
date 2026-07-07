@@ -102,6 +102,7 @@ export default function App() {
         <GameScreen
           code={screen.code}
           seat={screen.seat}
+          pushToken={pushToken}
           onLeave={() => setScreen({ kind: "lobby" })}
         />
       )}
