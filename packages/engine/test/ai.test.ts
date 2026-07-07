@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyAction, chooseAction } from "../src";
+import { applyAction, chooseAction, rankOf } from "../src";
 import { A, C, D, H, J, K, Q, S, baseState, card, seededRng, stack } from "./helpers";
 
 const rng = () => seededRng(7);
@@ -93,6 +93,20 @@ describe("AI move selection", () => {
     });
     const action = chooseAction(s, "p2", rng());
     expect(action).toEqual({ type: "oneOff", by: "p2", card: card(7, S), target: null, fromSeven: false });
+  });
+
+  it("holds a valuable Ace instead of spending it for a small gain", () => {
+    // Opponent has only 3 board points — wiping them with an Ace is a waste.
+    // The AI should develop (points/scuttle) and keep the Ace for later.
+    const s = baseState({
+      turn: "p2",
+      deck: [card(5, D), card(6, D)],
+      hands: { p1: [card(K, C)], p2: [card(A, C), card(9, S)] },
+      points: { p1: [stack(card(3, C), "p1")], p2: [] },
+    });
+    const action = chooseAction(s, "p2", rng());
+    const playsTheAce = action?.type === "oneOff" && rankOf(action.card) === 1;
+    expect(playsTheAce).toBe(false);
   });
 
   it("returns null when it isn't the AI's move", () => {

@@ -47,15 +47,34 @@ function evalState(s: GameState, me: PlayerId): number {
   return v;
 }
 
-/** Extra tactical nudges the static eval can't see. */
-function tacticalBonus(s: GameState, me: PlayerId, action: Action): number {
-  if (!("card" in action)) return 0;
+/** Tactical nudges the static 1-ply eval can't see: option value of holding
+ *  strong one-offs, building a hand, and a desperation gamble when losing. */
+function moveHeuristics(s: GameState, me: PlayerId, action: Action): number {
   const opp = other(me);
+  const threat = isThreatening(s, opp);
   const myNeed = goalOf(s, me) - pointsOf(s, me);
-  if (!isThreatening(s, opp) || myNeed <= 0) return 0;
-  // Facing likely defeat: gamble a Seven (draw & play the top card) to dig for
-  // a disruptive card, rather than making a dead point play that can't save us.
-  if (action.type === "oneOff" && rankOf(action.card) === 7) return 12;
+
+  if (action.type === "draw") {
+    // Build a hand when it's thin and nothing urgent is happening, instead of
+    // dumping a card every single turn.
+    return !threat && s.hands[me].length <= 3 && s.deck.length > 0 ? 4 : 0;
+  }
+  if (!("card" in action)) return 0;
+  const r = rankOf(action.card);
+
+  // Facing likely defeat: gamble a Seven to dig for a disruptive card.
+  if (threat && myNeed > 0 && action.type === "oneOff" && r === 7) return 12;
+
+  // Hold high-value one-offs for a high-impact moment rather than spending them
+  // for a small immediate gain. In threat mode the disruption value already
+  // dwarfs these penalties, so a defensive Ace/Six/Two still fires when it
+  // actually matters.
+  if (action.type === "oneOff") {
+    if (r === 1) return -14; // Ace — wait for a big opponent board
+    if (r === 6) return -9; //  Six — wait until they have royals/jacks
+    if (r === 2) return -7; //  Two — keep it to counter or hit a key royal
+    if (r === 9) return -3; //  Nine — mild; it's strong proactively too
+  }
   return 0;
 }
 
@@ -107,7 +126,7 @@ function bestOf(
   let best: Action | null = null;
   let bestScore = -Infinity;
   for (const a of candidates) {
-    const sc = scoreAction(s, me, a) + (withTactics ? tacticalBonus(s, me, a) : 0);
+    const sc = scoreAction(s, me, a) + (withTactics ? moveHeuristics(s, me, a) : 0);
     if (sc > bestScore || (sc === bestScore && rng() < 0.5)) {
       bestScore = sc;
       best = a;
