@@ -478,44 +478,79 @@ export function GameBoard({
       </ScrollView>
 
       {/* Counter modal */}
-      <Sheet visible={counterMine && !!s.pending} title="One-off incoming!">
-        {s.pending && (
-          <>
-            <View style={{ flexDirection: "row", gap: 10, alignItems: "center", marginBottom: 8 }}>
-              <CardView id={s.pending.c} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.text }}>
-                  <Text style={{ fontWeight: "700" }}>{s.names[s.pending.by]}</Text> played{" "}
-                  <Text style={{ fontWeight: "700" }}>{cardName(s.pending.c)}</Text>:
-                </Text>
-                <Hint>{ONE_OFF_DESC[rankOf(s.pending.c)]}</Hint>
-                {s.pending.counters.length > 0 && (
-                  <Hint style={{ marginTop: 4 }}>
-                    Counter chain: {s.pending.counters.map((x) => cardName(x.c)).join(" ← ")}{" "}
-                    {s.pending.counters.length % 2 === 1 ? "(currently countered)" : "(currently resolving)"}
-                  </Hint>
+      <Sheet
+        visible={counterMine && !!s.pending}
+        title={s.pending && s.pending.counters.length > 0 ? "Counter war!" : "One-off incoming!"}
+      >
+        {s.pending &&
+          (() => {
+            const nCounters = s.pending.counters.length;
+            // Even counters (0, 2, …) → the original one-off currently WILL
+            // resolve; odd → it's currently cancelled. Countering flips it.
+            const willResolve = nCounters % 2 === 0;
+            const last = nCounters > 0 ? s.pending.counters[nCounters - 1] : null;
+            return (
+              <>
+                <View style={{ flexDirection: "row", gap: 10, alignItems: "center", marginBottom: 8 }}>
+                  <CardView id={s.pending.c} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text }}>
+                      <Text style={{ fontWeight: "700" }}>{s.names[s.pending.by]}</Text>'s{" "}
+                      <Text style={{ fontWeight: "700" }}>{cardName(s.pending.c)}</Text> one-off
+                    </Text>
+                    <Hint>{ONE_OFF_DESC[rankOf(s.pending.c)]}</Hint>
+                  </View>
+                </View>
+
+                {last && (
+                  <Text style={{ color: colors.text, marginBottom: 6 }}>
+                    {last.by === me ? "You" : s.names[last.by]} countered it with{" "}
+                    <Text style={{ fontWeight: "700" }}>{cardName(last.c)}</Text>.
+                  </Text>
                 )}
-              </View>
-            </View>
-            <View style={styles.arow}>
-              {myTwos.map((c) => (
-                <Btn
-                  key={c}
-                  kind="warn"
-                  title={`Counter with ${cardName(c)}`}
-                  disabled={busy}
-                  onPress={() => commit((g) => playCounterTwo(g, me, c))}
-                />
-              ))}
-              <Btn
-                kind="primary"
-                title="Let it resolve"
-                disabled={busy}
-                onPress={() => commit((g) => declineCounter(g, me))}
-              />
-            </View>
-          </>
-        )}
+
+                {/* Plain-language current outcome */}
+                <View
+                  style={{
+                    backgroundColor: willResolve ? "#4a2a13" : "#13402a",
+                    borderRadius: 8,
+                    padding: 8,
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text style={{ color: colors.text, fontWeight: "600" }}>
+                    {willResolve
+                      ? `➡️ As it stands, the ${cardName(s.pending.c)} WILL happen.`
+                      : `➡️ As it stands, the ${cardName(s.pending.c)} is cancelled — nothing happens.`}
+                  </Text>
+                </View>
+
+                <Hint style={{ marginBottom: 6 }}>
+                  {willResolve
+                    ? "Counter with a 2 to cancel it, or let it happen."
+                    : "Counter with a 2 to make it happen after all, or let it fizzle."}
+                </Hint>
+
+                <View style={styles.arow}>
+                  {myTwos.map((c) => (
+                    <Btn
+                      key={c}
+                      kind="warn"
+                      title={`Counter with ${cardName(c)}`}
+                      disabled={busy}
+                      onPress={() => commit((g) => playCounterTwo(g, me, c))}
+                    />
+                  ))}
+                  <Btn
+                    kind="primary"
+                    title={willResolve ? "Let it happen" : "Let it fizzle"}
+                    disabled={busy}
+                    onPress={() => commit((g) => declineCounter(g, me))}
+                  />
+                </View>
+              </>
+            );
+          })()}
       </Sheet>
 
       {/* Discard modal (Four) */}

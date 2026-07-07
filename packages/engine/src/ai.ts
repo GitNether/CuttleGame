@@ -5,10 +5,11 @@ import { jackTargets, nineTargets, scuttleTargets, twoTargets } from "./targets"
 import { clone, goalOf, kingsOf, pointsOf, queensOf } from "./state";
 import { other, type GameState, type PlayerId, type Rng } from "./types";
 
-// A heuristic single-player opponent. It's a greedy 1-ply evaluator: for each
-// legal action it simulates the result through the real engine and scores the
-// resulting position, then plays the best. Not a perfect player — it doesn't
-// search ahead or reason about the hidden hand — but a solid casual opponent.
+// A heuristic single-player opponent. For each legal action it simulates the
+// result through the real engine, rolls any immediate follow-up phases forward
+// with simple choices, and scores the resulting position — then plays near the
+// best (with a little randomness so it isn't perfectly predictable). No deep
+// search and no peeking at the hidden hand, but a solid casual opponent.
 
 /** Is `opp` one point card away from winning (i.e. threatening lethal)? */
 function isThreatening(s: GameState, opp: PlayerId): boolean {
@@ -33,61 +34,76 @@ function evalState(s: GameState, me: PlayerId): number {
   const oppThreat = isThreatening(s, opp);
 
   let v = 0;
-  // My progress toward the goal — but worth far less when the opponent is
-  // about to win, because points I'll never get to cash in are pointless.
+  // My progress — worth far less when the opponent is about to win (points I
+  // can't cash in before they win are pointless).
   v += ((myGoal - myNeed) / myGoal) * (oppThreat && myNeed > 0 ? 8 : 40);
-  // Opponent progress is bad, and weighed heavily once they're threatening —
-  // this makes disruption (scuttle, Ace, raising their goal) the priority.
+  // Opponent progress is bad, weighed heavily once they're threatening.
   v -= ((oppGoal - oppNeed) / oppGoal) * (oppThreat ? 90 : 40);
-  if (oppThreat) v -= (11 - oppNeed) * 6; // the closer to lethal, the worse
-  v += (myP - oppP) * 1; // small tie-breaker on raw board points
-  v += (s.hands[me].length - s.hands[opp].length) * 1.5; // card advantage
-  v += (kingsOf(s, me) - kingsOf(s, opp)) * 4; // kings lower the goal
-  v += (queensOf(s, me).length - queensOf(s, opp).length) * 3; // protection
+  if (oppThreat) v -= (11 - oppNeed) * 6;
+  v += (myP - oppP) * 1;
+  v += (s.hands[me].length - s.hands[opp].length) * 1.5;
+  v += (kingsOf(s, me) - kingsOf(s, opp)) * 4;
+  v += (queensOf(s, me).length - queensOf(s, opp).length) * 3;
   return v;
 }
 
-/** Tactical nudges the static 1-ply eval can't see: option value of holding
- *  strong one-offs, building a hand, and a desperation gamble when losing. */
+/** Resolve immediate follow-up phases with simple, reasonable choices so the
+ *  evaluation reflects the true effect of a move (e.g. a Four really costing
+ *  the opponent two cards). Counters are assumed declined; the forced Seven is
+ *  intentionally NOT rolled forward — its value comes from a card we haven't
+ *  seen, so we don't let the AI peek at the deck. */
+function rollForward(sim: GameState): void {
+  let guard = 0;
+  while (guard++ < 8 && sim.actor) {
+    if (sim.phase === "counter") {
+      if (!declineCounter(sim, sim.actor)) break;
+    } else if (sim.phase === "scrap_pick") {
+      if (!applyAction(sim, chooseScrapPick(sim, sim.actor))) break;
+    } else if (sim.phase === "discard") {
+      if (!applyAction(sim, chooseDiscard(sim, sim.actor))) break;
+    } else {
+      break; // play / seven / over — nothing to auto-resolve
+    }
+  }
+}
+
+/** Score an action by simulating and evaluating the resulting position. */
+function scoreAction(s: GameState, me: PlayerId, action: Action): number {
+  const sim = clone(s);
+  if (!applyAction(sim, action)) return -Infinity;
+  rollForward(sim);
+  return evalState(sim, me);
+}
+
+/** Tactical nudges the static eval can't see. */
 function moveHeuristics(s: GameState, me: PlayerId, action: Action): number {
   const opp = other(me);
   const threat = isThreatening(s, opp);
   const myNeed = goalOf(s, me) - pointsOf(s, me);
 
   if (action.type === "draw") {
-    // Build a hand when it's thin and nothing urgent is happening, instead of
-    // dumping a card every single turn.
+    // Build a hand when it's thin and nothing urgent is happening.
     return !threat && s.hands[me].length <= 3 && s.deck.length > 0 ? 4 : 0;
   }
   if (!("card" in action)) return 0;
   const r = rankOf(action.card);
 
-  // Facing likely defeat: gamble a Seven to dig for a disruptive card.
-  if (threat && myNeed > 0 && action.type === "oneOff" && r === 7) return 12;
-
-  // Hold high-value one-offs for a high-impact moment rather than spending them
-  // for a small immediate gain. In threat mode the disruption value already
-  // dwarfs these penalties, so a defensive Ace/Six/Two still fires when it
-  // actually matters.
   if (action.type === "oneOff") {
-    if (r === 1) return -14; // Ace — wait for a big opponent board
-    if (r === 6) return -9; //  Six — wait until they have royals/jacks
-    if (r === 2) return -7; //  Two — keep it to counter or hit a key royal
-    if (r === 9) return -3; //  Nine — mild; it's strong proactively too
+    if (r === 7) return threat && myNeed > 0 ? 16 : 5; // draw & play a free card
+    if (r === 5) return 2; //  draw two — handy tempo
+    if (r === 1) return -14; // hold the Ace for a big board
+    if (r === 6) return -9; //  hold the Six for their royals/jacks
+    if (r === 2) return -7; //  keep 2s to counter or hit a key royal
+    if (r === 9) return -3; //  mild — nines are strong proactively too
+  }
+
+  // Keep your single best point card as a finisher/scuttler while the win is
+  // still far off — makes the AI less predictable and holds a scuttler back.
+  if (action.type === "point" && !threat && myNeed > 10 && r >= 8) {
+    const pointRanks = s.hands[me].map((c) => rankOf(c)).filter((x) => x <= 10);
+    if (r === Math.max(0, ...pointRanks)) return -6;
   }
   return 0;
-}
-
-/** Score an action by simulating it and evaluating the result. One-offs that
- *  land in a counter window are assumed to resolve (the opponent declines). */
-function scoreAction(s: GameState, me: PlayerId, action: Action): number {
-  const sim = clone(s);
-  if (!applyAction(sim, action)) return -Infinity;
-  let guard = 0;
-  while (sim.phase === "counter" && sim.pending && sim.actor === other(me) && guard++ < 4) {
-    if (!declineCounter(sim, other(me))) break;
-  }
-  return evalState(sim, me);
 }
 
 const ONE_OFF_NO_TARGET = new Set([1, 3, 4, 5, 6, 7]);
@@ -116,36 +132,39 @@ function cardActions(s: GameState, me: PlayerId, card: Card, fromSeven: boolean)
   return out;
 }
 
-function bestOf(
+const PICK_EPSILON = 2.5; // pick randomly among moves within this of the best
+
+/** Pick near the best move — randomly among those within PICK_EPSILON — so the
+ *  AI plays well but isn't perfectly predictable. */
+function pickBest(
   s: GameState,
   me: PlayerId,
   candidates: Action[],
   rng: Rng,
   withTactics = false
 ): Action | null {
-  let best: Action | null = null;
+  if (candidates.length === 0) return null;
+  const scored = candidates.map((a) => ({
+    a,
+    sc: scoreAction(s, me, a) + (withTactics ? moveHeuristics(s, me, a) : 0),
+  }));
   let bestScore = -Infinity;
-  for (const a of candidates) {
-    const sc = scoreAction(s, me, a) + (withTactics ? moveHeuristics(s, me, a) : 0);
-    if (sc > bestScore || (sc === bestScore && rng() < 0.5)) {
-      bestScore = sc;
-      best = a;
-    }
-  }
-  return best;
+  for (const x of scored) bestScore = Math.max(bestScore, x.sc);
+  const top = scored.filter((x) => x.sc >= bestScore - PICK_EPSILON);
+  return top[Math.floor(rng() * top.length)].a;
 }
 
 function choosePlay(s: GameState, me: PlayerId, rng: Rng): Action {
   const candidates: Action[] = [{ type: "draw", by: me }];
   for (const c of s.hands[me]) candidates.push(...cardActions(s, me, c, false));
-  return bestOf(s, me, candidates, rng, true) ?? { type: "draw", by: me };
+  return pickBest(s, me, candidates, rng, true) ?? { type: "draw", by: me };
 }
 
 function chooseSeven(s: GameState, me: PlayerId, rng: Rng): Action {
   const c = s.sevenCard;
   if (c == null) return { type: "sevenDiscard", by: me };
   const candidates = cardActions(s, me, c, true);
-  return bestOf(s, me, candidates, rng) ?? { type: "sevenDiscard", by: me };
+  return pickBest(s, me, candidates, rng) ?? { type: "sevenDiscard", by: me };
 }
 
 function chooseCounter(s: GameState, me: PlayerId): Action {
@@ -154,24 +173,22 @@ function chooseCounter(s: GameState, me: PlayerId): Action {
 
   const simDecline = clone(s);
   declineCounter(simDecline, me);
+  rollForward(simDecline);
   const vDecline = evalState(simDecline, me);
 
   const simCounter = clone(s);
   playCounterTwo(simCounter, me, twos[0]);
-  let guard = 0;
-  while (simCounter.phase === "counter" && simCounter.actor === other(me) && guard++ < 4) {
-    if (!declineCounter(simCounter, other(me))) break;
-  }
+  rollForward(simCounter);
   const vCounter = evalState(simCounter, me);
 
-  // Countering spends a 2 (worth keeping) — only do it for a real gain.
-  return vCounter > vDecline + 3
+  // Countering spends a 2 — worth it for a real gain, but block readily once
+  // the follow-through shows the one-off actually hurts.
+  return vCounter > vDecline + 2
     ? { type: "counter", by: me, card: twos[0] }
     : { type: "declineCounter", by: me };
 }
 
 function chooseDiscard(s: GameState, me: PlayerId): Action {
-  // Keep the most useful cards; dump the rest.
   const keep = (c: Card) => {
     const r = rankOf(c);
     if (r === 2) return 100; // counters
