@@ -12,7 +12,7 @@ import { whoActsNext } from "../sync";
 
 const HUMAN: PlayerId = "p1";
 const AI: PlayerId = "p2";
-const AI_THINK_MS = 650; // brief pause so the AI's moves feel deliberate
+const AI_THINK_MS = 1300; // brief pause so the AI's moves feel deliberate
 
 interface Props {
   name: string;

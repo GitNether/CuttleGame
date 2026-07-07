@@ -65,6 +65,36 @@ describe("AI move selection", () => {
     }
   });
 
+  it("disrupts instead of padding points when the opponent is about to win", () => {
+    // p1 (human) has 18 on board, goal 21 — one card from winning. p2 (AI)
+    // holds only a 10, which can either pad its own points (useless — it can't
+    // win first) or scuttle p1's biggest card. It should scuttle.
+    const s = baseState({
+      turn: "p2",
+      hands: { p1: [card(3, C)], p2: [card(10, S)] },
+      points: {
+        p1: [stack(card(10, H), "p1"), stack(card(8, H), "p1")],
+        p2: [],
+      },
+    });
+    const action = chooseAction(s, "p2", rng());
+    expect(action?.type).toBe("scuttle");
+  });
+
+  it("gambles a Seven rather than a dead point play when losing", () => {
+    // p1 about to win; p2's only tools are a 7 (gamble) and an 8 that can only
+    // pad points (can't scuttle p1's higher cards). It should play the 7 to
+    // dig for a disruptive card instead of the dead point play.
+    const s = baseState({
+      turn: "p2",
+      deck: [card(A, D), card(5, D)],
+      hands: { p1: [card(3, C)], p2: [card(7, S), card(8, D)] },
+      points: { p1: [stack(card(10, H), "p1"), stack(card(9, H), "p1")], p2: [] },
+    });
+    const action = chooseAction(s, "p2", rng());
+    expect(action).toEqual({ type: "oneOff", by: "p2", card: card(7, S), target: null, fromSeven: false });
+  });
+
   it("returns null when it isn't the AI's move", () => {
     const s = baseState({ turn: "p1", hands: { p1: [card(5, C)], p2: [card(9, D)] } });
     expect(chooseAction(s, "p2", rng())).toBeNull();
