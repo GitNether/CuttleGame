@@ -10,6 +10,12 @@ import { other, type GameState, type PlayerId, type Rng } from "./types";
 // resulting position, then plays the best. Not a perfect player — it doesn't
 // search ahead or reason about the hidden hand — but a solid casual opponent.
 
+/** Is `opp` one point card away from winning (i.e. threatening lethal)? */
+function isThreatening(s: GameState, opp: PlayerId): boolean {
+  const need = goalOf(s, opp) - pointsOf(s, opp);
+  return need > 0 && need <= 10 && s.hands[opp].length > 0;
+}
+
 /** Static evaluation of a position from `me`'s perspective (higher = better). */
 function evalState(s: GameState, me: PlayerId): number {
   const opp = other(me);
@@ -22,14 +28,35 @@ function evalState(s: GameState, me: PlayerId): number {
   const oppP = pointsOf(s, opp);
   const myGoal = goalOf(s, me);
   const oppGoal = goalOf(s, opp);
+  const myNeed = Math.max(0, myGoal - myP);
+  const oppNeed = Math.max(0, oppGoal - oppP);
+  const oppThreat = isThreatening(s, opp);
 
   let v = 0;
-  v += (myP - oppP) * 2; // raw board points
-  v += (myP / myGoal - oppP / oppGoal) * 40; // closeness to the win line
+  // My progress toward the goal — but worth far less when the opponent is
+  // about to win, because points I'll never get to cash in are pointless.
+  v += ((myGoal - myNeed) / myGoal) * (oppThreat && myNeed > 0 ? 8 : 40);
+  // Opponent progress is bad, and weighed heavily once they're threatening —
+  // this makes disruption (scuttle, Ace, raising their goal) the priority.
+  v -= ((oppGoal - oppNeed) / oppGoal) * (oppThreat ? 90 : 40);
+  if (oppThreat) v -= (11 - oppNeed) * 6; // the closer to lethal, the worse
+  v += (myP - oppP) * 1; // small tie-breaker on raw board points
   v += (s.hands[me].length - s.hands[opp].length) * 1.5; // card advantage
   v += (kingsOf(s, me) - kingsOf(s, opp)) * 4; // kings lower the goal
   v += (queensOf(s, me).length - queensOf(s, opp).length) * 3; // protection
   return v;
+}
+
+/** Extra tactical nudges the static eval can't see. */
+function tacticalBonus(s: GameState, me: PlayerId, action: Action): number {
+  if (!("card" in action)) return 0;
+  const opp = other(me);
+  const myNeed = goalOf(s, me) - pointsOf(s, me);
+  if (!isThreatening(s, opp) || myNeed <= 0) return 0;
+  // Facing likely defeat: gamble a Seven (draw & play the top card) to dig for
+  // a disruptive card, rather than making a dead point play that can't save us.
+  if (action.type === "oneOff" && rankOf(action.card) === 7) return 12;
+  return 0;
 }
 
 /** Score an action by simulating it and evaluating the result. One-offs that
@@ -70,11 +97,17 @@ function cardActions(s: GameState, me: PlayerId, card: Card, fromSeven: boolean)
   return out;
 }
 
-function bestOf(s: GameState, me: PlayerId, candidates: Action[], rng: Rng): Action | null {
+function bestOf(
+  s: GameState,
+  me: PlayerId,
+  candidates: Action[],
+  rng: Rng,
+  withTactics = false
+): Action | null {
   let best: Action | null = null;
   let bestScore = -Infinity;
   for (const a of candidates) {
-    const sc = scoreAction(s, me, a);
+    const sc = scoreAction(s, me, a) + (withTactics ? tacticalBonus(s, me, a) : 0);
     if (sc > bestScore || (sc === bestScore && rng() < 0.5)) {
       bestScore = sc;
       best = a;
@@ -86,7 +119,7 @@ function bestOf(s: GameState, me: PlayerId, candidates: Action[], rng: Rng): Act
 function choosePlay(s: GameState, me: PlayerId, rng: Rng): Action {
   const candidates: Action[] = [{ type: "draw", by: me }];
   for (const c of s.hands[me]) candidates.push(...cardActions(s, me, c, false));
-  return bestOf(s, me, candidates, rng) ?? { type: "draw", by: me };
+  return bestOf(s, me, candidates, rng, true) ?? { type: "draw", by: me };
 }
 
 function chooseSeven(s: GameState, me: PlayerId, rng: Rng): Action {
