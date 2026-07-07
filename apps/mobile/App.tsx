@@ -7,6 +7,7 @@ import { ensureSignedIn } from "./src/firebase";
 import { configureNotifications, registerForPushNotificationsAsync } from "./src/notifications";
 import { clearSession, loadPlayerName, loadSession, type SavedSession } from "./src/session";
 import { GameScreen } from "./src/screens/GameScreen";
+import { OfflineGameScreen } from "./src/screens/OfflineGameScreen";
 import { LobbyScreen } from "./src/screens/LobbyScreen";
 import { colors } from "./src/theme";
 
@@ -16,7 +17,8 @@ type Screen =
   | { kind: "boot" }
   | { kind: "auth-error" }
   | { kind: "lobby" }
-  | { kind: "game"; code: string; seat: PlayerId };
+  | { kind: "game"; code: string; seat: PlayerId }
+  | { kind: "offline" };
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ kind: "boot" });
@@ -80,6 +82,11 @@ export default function App() {
               setAuthTick((t) => t + 1);
             }}
           />
+          <Btn
+            title="Play vs Computer 🤖"
+            onPress={() => setScreen({ kind: "offline" })}
+            style={{ marginTop: 10 }}
+          />
         </View>
       )}
       {screen.kind === "lobby" && (
@@ -96,7 +103,11 @@ export default function App() {
             setResumable(null);
             clearSession();
           }}
+          onPlayOffline={() => setScreen({ kind: "offline" })}
         />
+      )}
+      {screen.kind === "offline" && (
+        <OfflineGameScreen name={savedName} onLeave={() => setScreen({ kind: "lobby" })} />
       )}
       {screen.kind === "game" && (
         <GameScreen

@@ -20,6 +20,7 @@ interface Props {
   pushToken: string | null;
   onEnterRoom: (code: string, seat: PlayerId, name: string) => void;
   onDiscardResume: () => void;
+  onPlayOffline: () => void;
 }
 
 export function LobbyScreen({
@@ -28,6 +29,7 @@ export function LobbyScreen({
   pushToken,
   onEnterRoom,
   onDiscardResume,
+  onPlayOffline,
 }: Props) {
   const [name, setName] = useState(initialName);
   const [joinCode, setJoinCode] = useState("");
@@ -169,6 +171,9 @@ export function LobbyScreen({
             />
             <Btn title="Join" onPress={join} disabled={busy} />
           </View>
+
+          <Text style={styles.divider}>— or play solo —</Text>
+          <Btn title="Play vs Computer 🤖" onPress={onPlayOffline} disabled={busy} />
 
           {err ? <Text style={styles.error}>{err}</Text> : null}
           <Hint style={{ marginTop: 16, fontSize: 12 }}>
