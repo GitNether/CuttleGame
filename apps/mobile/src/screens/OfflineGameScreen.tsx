@@ -22,9 +22,10 @@ interface Props {
 /** Single-player game against the built-in AI. Entirely local — no Firebase,
  *  works offline. Reuses GameBoard for the UI. */
 export function OfflineGameScreen({ name, onLeave }: Props) {
-  // AI deals (holds 6), so the human goes first.
+  // AI deals (holds 6), so the human goes first. Avoid the default "You",
+  // which reads awkwardly as "You (you)" / "You wins!".
   const [state, setState] = useState<GameState>(() =>
-    newGame({ p1: name || "You", p2: "Computer" }, AI)
+    newGame({ p1: name.trim() || "Player", p2: "Computer" }, AI)
   );
   const [stateKey, setStateKey] = useState(0);
   const [thinking, setThinking] = useState(false);
