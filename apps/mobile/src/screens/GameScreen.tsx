@@ -42,13 +42,14 @@ import {
 } from "react-native";
 import { CardView } from "../components/CardView";
 import { Btn, Hint, Notice, RowLabel, Sheet } from "../components/ui";
-import { commitMove, subscribeRoom, whoActsNext, type RoomDoc } from "../sync";
+import { commitMove, refreshSeatPushToken, subscribeRoom, whoActsNext, type RoomDoc } from "../sync";
 import { sendTurnNotification } from "../notifications";
 import { colors } from "../theme";
 
 interface Props {
   code: string;
   seat: PlayerId;
+  pushToken: string | null;
   onLeave: () => void;
 }
 
@@ -59,7 +60,7 @@ interface TargetMode {
   targets: number[] | Target[];
 }
 
-export function GameScreen({ code, seat, onLeave }: Props) {
+export function GameScreen({ code, seat, pushToken, onLeave }: Props) {
   const [room, setRoom] = useState<RoomDoc | null | undefined>(undefined);
   const [selCard, setSelCard] = useState<Card | null>(null);
   const [targetMode, setTargetMode] = useState<TargetMode | null>(null);
@@ -91,6 +92,12 @@ export function GameScreen({ code, seat, onLeave }: Props) {
       sub.remove();
     };
   }, [code]);
+
+  // Store our push token on our seat once it's available (it may resolve after
+  // create/join, when the OS permission prompt is answered).
+  useEffect(() => {
+    if (pushToken) void refreshSeatPushToken(code, pushToken);
+  }, [code, pushToken]);
 
   const commit = useCallback(
     async (mutator: (g: GameState) => boolean) => {
@@ -454,6 +461,28 @@ export function GameScreen({ code, seat, onLeave }: Props) {
           </View>
         </View>
 
+        {/* Game over — win message + rematch, kept in the middle by the banner */}
+        {s.phase === "over" && (
+          <View style={styles.gameover}>
+            <Text style={{ color: colors.gold, fontSize: 20, fontWeight: "700" }}>
+              {s.winner === "draw" ? "Draw game!" : `${s.names[s.winner as PlayerId]} wins! 🏆`}
+            </Text>
+            {winnerCanRematch ? (
+              <Btn
+                kind="primary"
+                title="Rematch"
+                disabled={busy}
+                onPress={() => commit((g) => actRematch(g, me))}
+              />
+            ) : (
+              <Hint>
+                Waiting for {s.winner === "draw" ? s.names.p1 : s.names[s.winner as PlayerId]} to
+                start the rematch…
+              </Hint>
+            )}
+          </View>
+        )}
+
         {/* Seven panel */}
         {sevenMine && s.sevenCard != null && (
           <View style={[styles.actions, { borderColor: colors.gold }]}>
@@ -512,27 +541,6 @@ export function GameScreen({ code, seat, onLeave }: Props) {
               </Text>
             ))}
         </View>
-
-        {s.phase === "over" && (
-          <View style={{ alignItems: "center", marginTop: 12, gap: 8 }}>
-            <Text style={{ color: colors.gold, fontSize: 20, fontWeight: "700" }}>
-              {s.winner === "draw" ? "Draw game!" : `${s.names[s.winner as PlayerId]} wins! 🏆`}
-            </Text>
-            {winnerCanRematch ? (
-              <Btn
-                kind="primary"
-                title="Rematch"
-                disabled={busy}
-                onPress={() => commit((g) => actRematch(g, me))}
-              />
-            ) : (
-              <Hint>
-                Waiting for {s.winner === "draw" ? s.names.p1 : s.names[s.winner as PlayerId]} to
-                start the rematch…
-              </Hint>
-            )}
-          </View>
-        )}
       </ScrollView>
 
       {/* Counter modal */}
@@ -734,6 +742,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   turnbannerYou: { borderColor: colors.gold },
+  gameover: {
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: 12,
+    backgroundColor: colors.sea3,
+  },
   actions: {
     backgroundColor: colors.actionBg,
     borderColor: colors.actionBorder,
