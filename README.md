@@ -2,7 +2,8 @@
 
 Two-player online implementation of **Cuttle** (the 1975 combat card game) as a
 cross-platform mobile app: Expo (React Native) + Firebase, migrated from the
-original single-file web artifact (`legacy/cuttle-online.jsx`).
+original single-file web artifact (`legacy/cuttle-online.jsx`). Also includes a
+**single-player mode vs a built-in AI** that works fully offline.
 
 Rules reference: <https://github.com/shmup/card-game-rules/blob/master/cuttle.md>
 — plus one house rule: the **9 one-off places the targeted permanent on top of
@@ -12,8 +13,8 @@ the draw pile** instead of returning it to its controller's hand.
 
 | Path | What |
 |---|---|
-| `packages/engine` | Pure TypeScript game engine, no dependencies, 59 unit tests |
-| `apps/mobile` | Expo app (iOS + Android): UI, Firestore realtime sync, room lifecycle |
+| `packages/engine` | Pure TypeScript game engine + heuristic AI, no dependencies, 65 unit tests |
+| `apps/mobile` | Expo app (iOS + Android): UI (`game/GameBoard`), online (Firestore) + offline (AI) game modes |
 | `firebase/` | Firestore security rules + setup instructions |
 | `docs/MIGRATION_PLAN.md` | Architecture, Firestore schema, sync/commit protocol |
 | `docs/STORE_CHECKLIST.md` | Manual steps: Firebase, EAS, App Store, Play Store, GDPR privacy policy |
